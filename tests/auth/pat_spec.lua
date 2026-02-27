@@ -1,0 +1,57 @@
+--- tests/auth/pat_spec.lua — unit tests for auth/pat.lua
+
+local pat_mod = require("ado.auth.pat")
+local util    = require("ado.core.util")
+
+describe("pat.new", function()
+  it("returns nil + err for empty token", function()
+    local p, err = pat_mod.new("")
+    assert.is_nil(p)
+    assert.is_not_nil(err)
+    assert.equals("auth", err.type)
+    assert.is_false(err.retryable)
+  end)
+
+  it("returns nil + err for nil token", function()
+    local p, err = pat_mod.new(nil)
+    assert.is_nil(p)
+    assert.is_not_nil(err)
+    assert.equals("auth", err.type)
+  end)
+
+  it("returns provider for valid token", function()
+    local p, err = pat_mod.new("my-secret-token")
+    assert.is_nil(err)
+    assert.is_not_nil(p)
+  end)
+end)
+
+describe("pat:get_authorization_header", function()
+  it("returns a string starting with 'Basic '", function()
+    local p = pat_mod.new("sometoken")
+    local header = p:get_authorization_header()
+    assert.truthy(header:match("^Basic "))
+  end)
+
+  it("encodes ':token' in base64", function()
+    local token = "abc123"
+    local p = pat_mod.new(token)
+    local header = p:get_authorization_header()
+    local expected = "Basic " .. util.base64(":" .. token)
+    assert.equals(expected, header)
+  end)
+
+  it("produces the same header on repeated calls (deterministic)", function()
+    local p = pat_mod.new("tok")
+    assert.equals(p:get_authorization_header(), p:get_authorization_header())
+  end)
+end)
+
+describe("pat:refresh_if_needed", function()
+  it("returns true, nil (no-op)", function()
+    local p = pat_mod.new("tok")
+    local ok, err = p:refresh_if_needed()
+    assert.is_true(ok)
+    assert.is_nil(err)
+  end)
+end)
