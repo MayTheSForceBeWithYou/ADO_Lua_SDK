@@ -301,6 +301,71 @@ return function(client)
     }, opts)
   end
 
+  --- List discussion comments on a work item (newest first).
+  -- GET /{project}/_apis/wit/workItems/{id}/comments
+  -- Comments are a preview API; api-version is pinned to 7.0-preview.3.
+  -- Response data.comments is an array of { id, text, createdBy, createdDate, ... }.
+  -- @param id     number|string
+  -- @param params table  must contain project; optional order, $expand, …
+  -- @param opts   table
+  function M:get_comments(id, params, opts)
+    params = params or {}
+    opts   = opts or {}
+    local project = params.project or opts.project or client.config.project
+    if not project then
+      return nil, {
+        type      = "http",
+        message   = "work_items:get_comments requires project in params or opts",
+        retryable = false,
+      }
+    end
+    local query = {
+      ["api-version"] = "7.0-preview.3",
+      order           = "desc",
+    }
+    for k, v in pairs(params) do
+      if k ~= "project" then query[k] = v end
+    end
+    return client:request({
+      method = "GET",
+      path   = "/" .. tostring(project) .. "/_apis/wit/workItems/" .. tostring(id) .. "/comments",
+      params = query,
+    }, opts)
+  end
+
+  --- Add a discussion comment on a work item.
+  -- POST /{project}/_apis/wit/workItems/{id}/comments
+  -- Body: { text = "<html or plain text>" }
+  -- @param id     number|string
+  -- @param text   string  comment body (required, non-empty)
+  -- @param params table    must contain project
+  -- @param opts   table
+  function M:add_comment(id, text, params, opts)
+    params = params or {}
+    opts   = opts or {}
+    local project = params.project or opts.project or client.config.project
+    if not project then
+      return nil, {
+        type      = "http",
+        message   = "work_items:add_comment requires project in params or opts",
+        retryable = false,
+      }
+    end
+    if type(text) ~= "string" or not text:match("%S") then
+      return nil, {
+        type      = "http",
+        message   = "work_items:add_comment requires non-empty text",
+        retryable = false,
+      }
+    end
+    return client:request({
+      method = "POST",
+      path   = "/" .. tostring(project) .. "/_apis/wit/workItems/" .. tostring(id) .. "/comments",
+      params = { ["api-version"] = "7.0-preview.3" },
+      body   = { text = text },
+    }, opts)
+  end
+
   --- Get the states for a work item type.
   -- GET /{project}/_apis/wit/workitemtypes/{name}/states
   -- @param name   string
