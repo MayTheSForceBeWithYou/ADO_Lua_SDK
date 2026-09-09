@@ -1,7 +1,7 @@
 --- client.lua — Client constructor; attaches domain modules
 -- Depends on: config, core/pipeline, http/transport, core/cache, core/logger
 
-local config_mod   = require("ado.config")
+local config_mod   = require("ado.core.config")
 local pipeline_mod = require("ado.core.pipeline")
 local transport_mod = require("ado.http.transport")
 local cache_mod    = require("ado.core.cache")

@@ -46,6 +46,33 @@ local function percent_encode(s)
   end))
 end
 
+--- Percent-encode a URL path, keeping slashes as separators.
+-- Built without gsub replacement strings so "%20" is not re-interpreted
+-- as a capture (`%2`).
+-- @param path string e.g. "/My Project/_apis/wit/wiql"
+-- @return string
+function M.encode_path(path)
+  if not path or path == "" then return path or "" end
+  path = tostring(path)
+  local out = {}
+  local i, n = 1, #path
+  while i <= n do
+    local c = path:sub(i, i)
+    if c == "/" then
+      out[#out + 1] = "/"
+      i = i + 1
+    else
+      local j = i
+      while j <= n and path:sub(j, j) ~= "/" do
+        j = j + 1
+      end
+      out[#out + 1] = percent_encode(path:sub(i, j - 1))
+      i = j
+    end
+  end
+  return table.concat(out)
+end
+
 --- Build a query string from a table.
 -- Keys are sorted alphabetically for deterministic cache-key generation.
 -- @param t table of key→value pairs (values coerced to string)

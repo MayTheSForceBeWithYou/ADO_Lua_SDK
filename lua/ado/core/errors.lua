@@ -112,17 +112,22 @@ end
 -- ---------------------------------------------------------------------------
 --- @param exit_code number|nil  curl exit code or OS error code
 --- @param detail    string|nil  stderr output or description
-function M.transport(exit_code, detail)
+--- @param url       string|nil  request URL (no secrets; used in the message)
+function M.transport(exit_code, detail, url)
   local message = "Transport error"
   if detail and detail ~= "" then
     message = "Transport error: " .. tostring(detail)
   elseif exit_code then
     message = "Transport error (exit " .. tostring(exit_code) .. ")"
   end
+  if url and url ~= "" then
+    message = message .. " for " .. tostring(url):gsub("[\r\n]", "")
+  end
   return base("transport", message, {
     retryable = true,
     code      = exit_code and tostring(exit_code) or nil,
     raw       = detail,
+    url       = url,
   })
 end
 

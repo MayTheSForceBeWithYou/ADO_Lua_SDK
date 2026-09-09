@@ -38,8 +38,9 @@ function M.build(config, req_spec)
   end
 
   local qs = util.query_encode(query)
-  local url = base .. path
+  local url = base .. util.encode_path(path)
   if qs ~= "" then url = url .. "?" .. qs end
+  url = url:gsub("[\r\n]", "")
 
   -- Build headers
   local headers = {

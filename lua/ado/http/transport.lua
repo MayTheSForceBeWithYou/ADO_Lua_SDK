@@ -94,7 +94,7 @@ function CurlAdapter:send(req, opts)
   local timeout_s = math.ceil((req.timeout or 30000) / 1000)
 
   local parts = {
-    "curl", "-s", "-S", "-i",
+    "curl", "-s", "-S", "-i", "-g",
     "-X", shell_escape(req.method),
     "--max-time", tostring(timeout_s),
   }
@@ -107,17 +107,18 @@ function CurlAdapter:send(req, opts)
 
   -- Body
   if req.body_string and req.body_string ~= "" then
-    parts[#parts + 1] = "--data"
+    parts[#parts + 1] = "--data-raw"
     parts[#parts + 1] = shell_escape(req.body_string)
   end
 
+  parts[#parts + 1] = "--url"
   parts[#parts + 1] = shell_escape(req.url)
 
   local cmd = table.concat(parts, " ") .. " 2>&1"
 
   local handle = io.popen(cmd, "r")
   if not handle then
-    local err = errors.transport(nil, "io.popen failed to launch curl")
+    local err = errors.transport(nil, "io.popen failed to launch curl", req.url)
     if opts.callback then opts.callback(nil, err) end
     return nil, err
   end
@@ -126,14 +127,14 @@ function CurlAdapter:send(req, opts)
   local ok = handle:close()
 
   if not ok and (not raw_output or raw_output == "") then
-    local err = errors.transport(nil, "curl command failed with no output")
+    local err = errors.transport(nil, "curl command failed with no output", req.url)
     if opts.callback then opts.callback(nil, err) end
     return nil, err
   end
 
   local status, headers, body = parse_curl_output(raw_output)
   if not status then
-    local err = errors.transport(nil, "failed to parse curl output: " .. (raw_output:sub(1, 200)))
+    local err = errors.transport(nil, "failed to parse curl output: " .. (raw_output:sub(1, 200)), req.url)
     if opts.callback then opts.callback(nil, err) end
     return nil, err
   end
@@ -159,7 +160,7 @@ function VimAdapter:send(req, opts)
   -- Build curl args as a table for vim.system (safer than shell escaping)
   local timeout_s = math.ceil((req.timeout or 30000) / 1000)
   local args = {
-    "curl", "-s", "-S", "-i",
+    "curl", "-s", "-S", "-i", "-g",
     "-X", req.method,
     "--max-time", tostring(timeout_s),
   }
@@ -170,26 +171,32 @@ function VimAdapter:send(req, opts)
   end
 
   if req.body_string and req.body_string ~= "" then
-    args[#args + 1] = "--data"
+    args[#args + 1] = "--data-raw"
     args[#args + 1] = req.body_string
   end
 
+  args[#args + 1] = "--url"
   args[#args + 1] = req.url
+
+  -- vim.system callbacks run in a fast context; schedule so plugin UI can update.
+  local function deliver(res, err)
+    if not opts.callback then return end
+    vim.schedule(function()  -- luacheck: ignore vim
+      opts.callback(res, err)
+    end)
+  end
 
   local function on_exit(obj)
     if obj.code ~= 0 then
-      local err = errors.transport(obj.code, obj.stderr)
-      if opts.callback then opts.callback(nil, err) end
+      deliver(nil, errors.transport(obj.code, obj.stderr, req.url))
       return
     end
     local status, headers, body = parse_curl_output(obj.stdout or "")
     if not status then
-      local err = errors.transport(nil, "failed to parse curl output")
-      if opts.callback then opts.callback(nil, err) end
+      deliver(nil, errors.transport(nil, "failed to parse curl output", req.url))
       return
     end
-    local res = { status = status, headers = headers, body = body }
-    if opts.callback then opts.callback(res, nil) end
+    deliver({ status = status, headers = headers, body = body }, nil)
   end
 
   if opts.callback then
@@ -203,11 +210,11 @@ function VimAdapter:send(req, opts)
     local result_res, result_err
     vim.system(args, { text = true }, function(obj)  -- luacheck: ignore vim
       if obj.code ~= 0 then
-        result_err = errors.transport(obj.code, obj.stderr)
+        result_err = errors.transport(obj.code, obj.stderr, req.url)
       else
         local status, headers, body = parse_curl_output(obj.stdout or "")
         if not status then
-          result_err = errors.transport(nil, "failed to parse curl output")
+          result_err = errors.transport(nil, "failed to parse curl output", req.url)
         else
           result_res = { status = status, headers = headers, body = body }
         end

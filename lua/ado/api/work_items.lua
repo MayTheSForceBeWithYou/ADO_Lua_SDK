@@ -269,6 +269,38 @@ return function(client)
     }, opts)
   end
 
+  --- Get all update revisions for a work item.
+  -- GET /{project}/_apis/wit/workItems/{id}/updates
+  -- Returns an object with a .value array of update records.  Each record has:
+  --   rev          number
+  --   revisedBy    table  { displayName, uniqueName, … }
+  --   revisedDate  string ISO‑8601 timestamp
+  --   fields       table  map of fieldRef → { oldValue, newValue }
+  -- @param id     number|string  Work item ID
+  -- @param params table          optional; must contain project
+  -- @param opts   table
+  function M:get_updates(id, params, opts)
+    params = params or {}
+    opts   = opts or {}
+    local project = params.project or opts.project or client.config.project
+    if not project then
+      return nil, {
+        type      = "http",
+        message   = "work_items:get_updates requires project in params or opts",
+        retryable = false,
+      }
+    end
+    local query = {}
+    for k, v in pairs(params) do
+      if k ~= "project" then query[k] = v end
+    end
+    return client:request({
+      method = "GET",
+      path   = "/" .. tostring(project) .. "/_apis/wit/workItems/" .. tostring(id) .. "/updates",
+      params = query,
+    }, opts)
+  end
+
   --- Get the states for a work item type.
   -- GET /{project}/_apis/wit/workitemtypes/{name}/states
   -- @param name   string

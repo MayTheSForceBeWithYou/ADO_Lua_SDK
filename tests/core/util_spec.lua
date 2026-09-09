@@ -72,6 +72,21 @@ describe("util.query_encode", function()
   end)
 end)
 
+describe("util.encode_path", function()
+  it("leaves simple paths unchanged", function()
+    assert.equals("/_apis/projects", util.encode_path("/_apis/projects"))
+  end)
+
+  it("encodes spaces and parentheses in a project segment", function()
+    local path = util.encode_path("/PL Force Management (GFIM)/_apis/wit/wiql")
+    assert.equals("/PL%20Force%20Management%20%28GFIM%29/_apis/wit/wiql", path)
+  end)
+
+  it("returns empty string for empty input", function()
+    assert.equals("", util.encode_path(""))
+  end)
+end)
+
 describe("util.json_encode / util.json_decode", function()
   it("round-trips a simple table", function()
     local t = { name = "Alice", age = 30 }

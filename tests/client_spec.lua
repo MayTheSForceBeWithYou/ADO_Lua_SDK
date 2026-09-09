@@ -67,6 +67,15 @@ describe("ado.new", function()
     assert.equals("https://dev.azure.com/myorg", client.config.base_url)
   end)
 
+  it("strips CR/LF from Windows .env base_url values", function()
+    local client, err = ado.new({
+      base_url = "https://dev.azure.com/myorg\r",
+      auth     = pat,
+    })
+    assert.is_nil(err)
+    assert.equals("https://dev.azure.com/myorg", client.config.base_url)
+  end)
+
   it("uses provided api_version", function()
     local client = ado.new({
       base_url    = "https://dev.azure.com/myorg",
@@ -89,5 +98,14 @@ end)
 describe("ado.paginator", function()
   it("exposes collect function", function()
     assert.is_function(ado.paginator.collect)
+  end)
+end)
+
+describe("ado.sdk", function()
+  it("exports the same public API as require('ado')", function()
+    local sdk = require("ado.sdk")
+    assert.is_function(sdk.new)
+    assert.is_function(sdk.auth.pat)
+    assert.is_function(sdk.paginator.collect)
   end)
 end)
