@@ -53,6 +53,37 @@ describe("work_items:query_wiql", function()
     assert.truthy(q:match("Resolved"))
   end)
 
+  it("includes states NOT IN condition when exclude_states is specified", function()
+    local c = make_client()
+    local m = wi_factory(c)
+    m:query_wiql({ project = "P", exclude_states = { "Closed", "Removed" } })
+    local q = c._last_req.body.query
+    assert.truthy(q:match("System.State.*NOT IN"))
+    assert.truthy(q:match("Closed"))
+    assert.truthy(q:match("Removed"))
+  end)
+
+  it("orders by ChangedDate DESC by default", function()
+    local c = make_client()
+    local m = wi_factory(c)
+    m:query_wiql({ project = "P" })
+    assert.truthy(c._last_req.body.query:match("ORDER BY %[System.ChangedDate%] DESC$"))
+  end)
+
+  it("orders by the requested fields and directions", function()
+    local c = make_client()
+    local m = wi_factory(c)
+    m:query_wiql({
+      project  = "P",
+      order_by = {
+        { field = "Microsoft.VSTS.Common.StackRank", dir = "asc" },
+        "[System.Id]",
+      },
+    })
+    assert.truthy(c._last_req.body.query:match(
+      "ORDER BY %[Microsoft.VSTS.Common.StackRank%] ASC, %[System.Id%] DESC$"))
+  end)
+
   it("includes work item type IN condition when specified", function()
     local c = make_client()
     local m = wi_factory(c)
@@ -76,6 +107,24 @@ describe("work_items:query_wiql", function()
     local m = wi_factory(c)
     m:query_wiql({ project = "P", limit = 50 })
     assert.equals(50, c._last_req.params["$top"])
+  end)
+end)
+
+describe("work_items.rank_of", function()
+  local m = wi_factory(make_client())
+
+  it("reads StackRank", function()
+    assert.equals(120, m.rank_of({ fields = { ["Microsoft.VSTS.Common.StackRank"] = 120 } }))
+  end)
+
+  it("falls back to BacklogPriority", function()
+    assert.equals(7, m.rank_of({ fields = { ["Microsoft.VSTS.Common.BacklogPriority"] = 7 } }))
+  end)
+
+  it("returns nil when no rank field is present", function()
+    assert.is_nil(m.rank_of({ fields = { ["System.Id"] = 1 } }))
+    assert.is_nil(m.rank_of({}))
+    assert.is_nil(m.rank_of(nil))
   end)
 end)
 

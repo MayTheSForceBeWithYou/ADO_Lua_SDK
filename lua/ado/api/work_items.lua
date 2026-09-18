@@ -4,6 +4,27 @@
 return function(client)
   local M = {}
 
+  --- Field reference names that hold a work item's backlog rank.
+  -- Which one exists depends on the project's process: Agile and CMMI use
+  -- StackRank, Scrum uses BacklogPriority. Callers should read both.
+  M.RANK_FIELDS = {
+    "Microsoft.VSTS.Common.StackRank",
+    "Microsoft.VSTS.Common.BacklogPriority",
+  }
+
+  --- Read the backlog rank of a work item, whichever rank field it carries.
+  -- @param work_item table  work item with a .fields map
+  -- @return number|nil  rank value, or nil when the item has no rank
+  function M.rank_of(work_item)
+    local fields = work_item and work_item.fields
+    if type(fields) ~= "table" then return nil end
+    for _, ref in ipairs(M.RANK_FIELDS) do
+      local value = tonumber(fields[ref])
+      if value then return value end
+    end
+    return nil
+  end
+
   -- -------------------------------------------------------------------------
   -- WIQL builder helpers
   -- -------------------------------------------------------------------------
@@ -16,14 +37,17 @@ return function(client)
 
   --- Build a WIQL SELECT/FROM/WHERE/ORDER query from structured params.
   -- @param params table
-  --   params.project     string   required — filters [System.TeamProject]
-  --   params.area_path   string   optional — filters [System.AreaPath] UNDER 'path'
-  --   params.states      table    optional — list of state strings
-  --   params.types       table    optional — list of work item type strings
-  --   params.assigned_to string   optional — filters [System.AssignedTo]
-  --   params.tags        string   optional — filters [System.Tags] CONTAINS 'tag'
-  --   params.limit       number   optional — TOP N clause (default 200)
-  --   params.fields      table    optional — list of field refs for SELECT
+  --   params.project        string required — filters [System.TeamProject]
+  --   params.area_path      string optional — filters [System.AreaPath] UNDER 'path'
+  --   params.states         table  optional — list of state strings, matched with IN
+  --   params.exclude_states table  optional — list of state strings, matched with NOT IN
+  --   params.types          table  optional — list of work item type strings
+  --   params.assigned_to    string optional — filters [System.AssignedTo]
+  --   params.tags           string optional — filters [System.Tags] CONTAINS 'tag'
+  --   params.limit          number optional — TOP N clause (default 200)
+  --   params.fields         table  optional — list of field refs for SELECT
+  --   params.order_by       table  optional — list of { field = ref, dir = "ASC"|"DESC" },
+  --                                or a list of field refs (defaults to DESC)
   -- @return string  WIQL query
   local function build_wiql(params)
     -- SELECT
@@ -62,6 +86,15 @@ return function(client)
         "[System.State] IN (" .. table.concat(quoted, ", ") .. ")"
     end
 
+    if params.exclude_states and #params.exclude_states > 0 then
+      local quoted = {}
+      for _, s in ipairs(params.exclude_states) do
+        quoted[#quoted + 1] = "'" .. wiql_escape(s) .. "'"
+      end
+      conditions[#conditions + 1] =
+        "[System.State] NOT IN (" .. table.concat(quoted, ", ") .. ")"
+    end
+
     if params.types and #params.types > 0 then
       local quoted = {}
       for _, t in ipairs(params.types) do
@@ -85,7 +118,20 @@ return function(client)
       wiql = wiql .. " WHERE " .. table.concat(conditions, " AND ")
     end
 
-    wiql = wiql .. " ORDER BY [System.ChangedDate] DESC"
+    local order_terms = {}
+    for _, term in ipairs(params.order_by or {}) do
+      local field = type(term) == "table" and term.field or term
+      local dir = type(term) == "table" and term.dir or nil
+      if field then
+        if field:sub(1, 1) ~= "[" then field = "[" .. field .. "]" end
+        dir = tostring(dir or "DESC"):upper() == "ASC" and "ASC" or "DESC"
+        order_terms[#order_terms + 1] = field .. " " .. dir
+      end
+    end
+    if #order_terms == 0 then
+      order_terms = { "[System.ChangedDate] DESC" }
+    end
+    wiql = wiql .. " ORDER BY " .. table.concat(order_terms, ", ")
 
     -- Wrap in TOP if needed (WIQL uses $top query param, not in the query itself)
     -- The top param is passed separately via query params
